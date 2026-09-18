@@ -23,6 +23,8 @@
 8. [Automated HTTPS: Route 53 & ACM SSL Architecture](#8-automated-https-route-53--acm-ssl-architecture)
 9. [Hands-On Operational Runbook & Stress Testing Playbook](#9-hands-on-operational-runbook--stress-testing-playbook)
 10. [Top 20 Platform Engineer & SRE Interview Questions & Answers](#10-top-20-platform-engineer--sre-interview-questions--answers)
+11. [Zero-Cost Clean Teardown: "One-Go Total Wipeout" Architecture](#11-zero-cost-clean-teardown-one-go-total-wipeout-architecture)
+12. [Real-World Troubleshooting: Helm Key Parsing Error with Commas](#12-real-world-troubleshooting-helm-key-parsing-error-with-commas)
 
 ---
 
@@ -194,3 +196,73 @@ kubectl run load-generator --rm -i --tty --image=busybox --restart=Never -- /bin
 
 5. **How does IAM Roles for Service Accounts (IRSA) work?**
    IRSA uses OIDC federated authentication to exchange Kubernetes service account tokens for temporary AWS STS credentials, adhering to least privilege.
+
+---
+
+## 11. Zero-Cost Clean Teardown: "One-Go Total Wipeout" Architecture
+
+In production cloud engineering, clean deprovisioning is just as vital as provisioning to ensure zero residual costs and no orphaned resources.
+
+### ❓ Common Teardown Pitfalls:
+1. **Orphan ALBs & Subnet Dependency Violations**: When Kubernetes Ingress provisions an AWS ALB, the ALB and its ENIs reside inside the VPC subnets. If `terraform destroy` executes directly, the VPC cannot be destroyed (`DependencyViolation: Subnet has active interfaces`).
+2. **ECR Repository Non-Empty Error**: If container images exist in ECR, AWS blocks repository deletion (`RepositoryNotEmptyException`).
+3. **State Loss on Ephemeral CI Runners**: Ephemeral GitHub runners lose local `.tfstate` files after workflow execution, leaving cloud resources unmanageable.
+
+### 💡 The Complete Platform Solution:
+- **Pre-Clean Step**: Teardown automatically runs `kubectl delete ingress --all` and waits 30 seconds for AWS Load Balancer Controller to deprovision the ALB before Terraform touches the VPC.
+- **ECR `force_delete = true`**: Enables clean repository deletion regardless of image count.
+- **State Persistence with S3 & DynamoDB**: Encrypted remote backend guarantees state durability across all workflow runs.
+- **Automated Backend Wipeout**: Once all infrastructure is destroyed, the S3 state bucket and DynamoDB table are permanently deleted, leaving an absolute **$0.00 AWS footprint**.
+
+---
+
+## 12. Real-World Troubleshooting: Helm Key Parsing Error with Commas
+
+### 🚨 The Error Encountered:
+```text
+Error: failed parsing key "args[0]" with value --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname, key "ExternalIP" has no value (cannot end with ,)
+with module.cluster_addons.helm_release.metrics_server,
+on modules/cluster-addons/main.tf line 2, in resource "helm_release" "metrics_server":
+  2: resource "helm_release" "metrics_server" {
+```
+
+### 🔍 Root Cause Analysis:
+When using Terraform's `helm_release` with the `set` block:
+```hcl
+# ❌ Anti-pattern: String with commas gets parsed as multiple CLI keys
+set {
+  name  = "args[0]"
+  value = "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname"
+}
+```
+Helm CLI interprets commas `,` inside a `set` string as delimiters separating multiple key-value pairs (`--set a=1,b=2`). When Helm encountered `InternalIP,ExternalIP`, it assumed `ExternalIP` was a new flag without a value.
+
+### 🛠️ Production Solution (`yamlencode`):
+Use Terraform's native `yamlencode` inside the `values` block. This bypasses string splitting and serializes clean YAML to Helm:
+```hcl
+# ✅ Best Practice: Native YAML serialization
+resource "helm_release" "metrics_server" {
+  name       = "metrics-server"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = "3.12.2"
+  namespace  = "kube-system"
+
+  values = [
+    yamlencode({
+      args = [
+        "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname"
+      ]
+    })
+  ]
+}
+```
+
+### 🎯 Live Verification:
+```bash
+$ kubectl top nodes
+NAME                                         CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+ip-10-0-12-225.ap-south-1.compute.internal   25m          1%       564Mi           17%         
+ip-10-0-13-70.ap-south-1.compute.internal    57m          2%       752Mi           22%
+```
+
