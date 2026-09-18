@@ -110,10 +110,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Set Up Kustomize
-        uses: imranismail/setup-kustomize@v2
-        with:
-          kustomize-version: "latest"
+      - name: Install Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          kustomize version
 
       - name: Update GitOps Kustomize Image Tag
         run: |

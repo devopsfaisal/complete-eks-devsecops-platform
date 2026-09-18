@@ -26,6 +26,7 @@
 11. [Zero-Cost Clean Teardown: "One-Go Total Wipeout" Architecture](#11-zero-cost-clean-teardown-one-go-total-wipeout-architecture)
 12. [Real-World Troubleshooting: Helm Key Parsing Error with Commas](#12-real-world-troubleshooting-helm-key-parsing-error-with-commas)
 13. [Python CI/CD Troubleshooting: Module vs Package Shadowing in Unittest](#13-python-cicd-troubleshooting-module-vs-package-shadowing-in-unittest)
+14. [CI/CD Troubleshooting: Kustomize Action Semver Error (invalid semver requested: latest)](#14-cicd-troubleshooting-kustomize-action-semver-error-invalid-semver-requested-latest)
 
 ---
 
@@ -298,5 +299,39 @@ When running `python -m unittest discover -s app/tests` from the repository root
        app = app.app
    ```
 This guarantees consistent imports regardless of whether tests execute from the root directory, subdirectories, or inside Docker containers.
+
+---
+
+## 14. CI/CD Troubleshooting: Kustomize Action Semver Error (invalid semver requested: latest)
+
+### 🚨 The Error Encountered:
+```text
+Node 20 is being deprecated. This workflow is running with Node 24 by default...
+Run imranismail/setup-kustomize@v2
+Error: Error: invalid semver requested: latest
+```
+
+### 🔍 Root Cause Analysis:
+1. The marketplace GitHub Action `imranismail/setup-kustomize@v2` strictly parses input versions using the Node `semver` library.
+2. Passing `kustomize-version: "latest"` caused `semver` to fail because `"latest"` is not a valid Semantic Versioning string (`X.Y.Z`).
+3. Furthermore, older third-party actions emit Node runtime deprecation warnings (`Node 20 is being deprecated`), degrading CI pipeline hygiene.
+
+### 🛠️ Production Solution:
+Replace unmaintained third-party actions with the official, fast Kubernetes SIGs shell installer:
+
+```yaml
+# ✅ Direct, Fast & Zero-Deprecation Official Installation
+- name: Install Kustomize
+  run: |
+    curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+    sudo mv kustomize /usr/local/bin/
+    kustomize version
+```
+- **Benefits**:
+  - Always downloads official binary releases directly from GitHub.
+  - Zero Node runtime dependencies.
+  - Executes in under 2 seconds.
+  - Eliminates semver parsing errors entirely.
+
 
 
