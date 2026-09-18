@@ -25,6 +25,7 @@
 10. [Top 20 Platform Engineer & SRE Interview Q&A](#10-top-20-platform-engineer--sre-interview-qa)
 11. [Zero-Cost Clean Teardown: "One-Go Total Wipeout" Architecture](#11-zero-cost-clean-teardown-one-go-total-wipeout-architecture)
 12. [Real-World Troubleshooting: Helm Key Parsing Error with Commas](#12-real-world-troubleshooting-helm-key-parsing-error-with-commas)
+13. [Python CI/CD Troubleshooting: Module vs Package Shadowing in Unittest](#13-python-cicd-troubleshooting-module-vs-package-shadowing-in-unittest)
 
 ---
 
@@ -253,5 +254,44 @@ ip-10-0-12-225.ap-south-1.compute.internal   25m          1%       564Mi        
 ip-10-0-13-70.ap-south-1.compute.internal    57m          2%       752Mi           22%
 ```
 Ab HPA ko real-time CPU/RAM consumption data milna shuru ho chuka hai!
+
+---
+
+## 13. Python CI/CD Troubleshooting: Module vs Package Shadowing in Unittest
+
+Microservice CI/CD pipelines me automated testing lagate waqt Python ke import mechanics ka samna karna padta hai.
+
+### 🚨 Actual Pipeline Error (From Live CI Run):
+```text
+ERROR: test_healthz (test_app.TestApp.test_healthz)
+Traceback (most recent call last):
+  File "app/tests/test_app.py", line 6, in setUp
+    self.client = app.test_client()
+AttributeError: module 'app.app' has no attribute 'test_client'
+```
+
+### 🔍 Root Cause Analysis (Kyun Hua Yeh?):
+1. Hamare folder ka naam `app/` hai aur andar file ka naam bhi `app.py` hai.
+2. Jab GitHub Actions repo root se `python -m unittest discover -s app/tests` run karta hai, toh `from app import app` likhne par:
+   - Python `app/` directory ko package samajhta hai.
+   - Aur `app.py` ko module `app.app` ke roop me import karta hai.
+   - Nateeja yeh hota hai ki test file ko Flask application instance ki jagah `app.py` module object mil jata hai!
+   - Aur Python module ke paas koi `.test_client()` function nahi hota, isliye `AttributeError` throw ho gaya!
+
+### 🛠️ Industry Best Practice Solution:
+Humne 2 layered protection implement kiya:
+1. **`app/__init__.py`**: Flask application object ko explicitly package level par expose kiya:
+   ```python
+   from .app import app
+   __all__ = ["app"]
+   ```
+2. **Defensive Import in `test_app.py`**:
+   ```python
+   # Module vs Package import ambiguity ko resolve karne ke liye:
+   if hasattr(app, 'app') and not hasattr(app, 'test_client'):
+       app = app.app
+   ```
+Ab chahe test runner root repo se chale, `app/` folder se chale, ya kisi CI/CD docker container ke andar chale — application instance hamesha 100% reliably resolve hoga!
+
 
 

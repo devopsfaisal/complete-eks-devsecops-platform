@@ -25,6 +25,7 @@
 10. [Top 20 Platform Engineer & SRE Interview Questions & Answers](#10-top-20-platform-engineer--sre-interview-questions--answers)
 11. [Zero-Cost Clean Teardown: "One-Go Total Wipeout" Architecture](#11-zero-cost-clean-teardown-one-go-total-wipeout-architecture)
 12. [Real-World Troubleshooting: Helm Key Parsing Error with Commas](#12-real-world-troubleshooting-helm-key-parsing-error-with-commas)
+13. [Python CI/CD Troubleshooting: Module vs Package Shadowing in Unittest](#13-python-cicd-troubleshooting-module-vs-package-shadowing-in-unittest)
 
 ---
 
@@ -265,4 +266,37 @@ NAME                                         CPU(cores)   CPU(%)   MEMORY(bytes)
 ip-10-0-12-225.ap-south-1.compute.internal   25m          1%       564Mi           17%         
 ip-10-0-13-70.ap-south-1.compute.internal    57m          2%       752Mi           22%
 ```
+
+---
+
+## 13. Python CI/CD Troubleshooting: Module vs Package Shadowing in Unittest
+
+### 🚨 The Error Encountered:
+```text
+ERROR: test_healthz (test_app.TestApp.test_healthz)
+Traceback (most recent call last):
+  File "app/tests/test_app.py", line 6, in setUp
+    self.client = app.test_client()
+AttributeError: module 'app.app' has no attribute 'test_client'
+```
+
+### 🔍 Root Cause Analysis:
+When running `python -m unittest discover -s app/tests` from the repository root:
+1. `from app import app` creates namespace ambiguity: `app` is both the parent directory (a package) and `app.py` (a module).
+2. Python imports the module `app.app` instead of the Flask application instance inside it.
+3. The module object does not possess a `.test_client()` method, triggering an `AttributeError`.
+
+### 🛠️ Production Solution:
+1. Expose `app` in `app/__init__.py`:
+   ```python
+   from .app import app
+   __all__ = ["app"]
+   ```
+2. Add defensive resolution in `test_app.py`:
+   ```python
+   if hasattr(app, 'app') and not hasattr(app, 'test_client'):
+       app = app.app
+   ```
+This guarantees consistent imports regardless of whether tests execute from the root directory, subdirectories, or inside Docker containers.
+
 
