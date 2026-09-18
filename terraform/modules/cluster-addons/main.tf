@@ -6,10 +6,13 @@ resource "helm_release" "metrics_server" {
   version    = "3.12.2"
   namespace  = "kube-system"
 
-  set {
-    name  = "args[0]"
-    value = "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname"
-  }
+  values = [
+    yamlencode({
+      args = [
+        "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname"
+      ]
+    })
+  ]
 }
 
 # 2. AWS Load Balancer Controller IAM Role (IRSA)
