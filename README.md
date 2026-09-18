@@ -130,6 +130,24 @@ Open your browser at:
 
 ---
 
+### 💥 5. One-Go Total Wipeout (Zero Cost Teardown)
+When you want to completely clean up every single AWS resource in one click with **0 orphan resources and 0 residual billing**:
+
+#### Option A: Via GitHub Actions (Recommended)
+1. Go to **Actions ➜ `01: Terraform Infrastructure Pipeline` ➜ Run workflow**
+2. Choose **`destroy`** from the action dropdown and click **Run workflow**.
+3. The pipeline will:
+   - Clean up in-cluster Ingress & trigger AWS ALB deprovisioning.
+   - Run `terraform destroy` across all modules (ECR with `force_delete`).
+   - Wipe out the S3 state bucket and DynamoDB lock table for a 100% clean account.
+
+#### Option B: Via Local Terminal
+```bash
+./scripts/teardown.sh
+```
+
+---
+
 ## 🛡️ Key Enterprise Features
 
 1. **"One-Go Apply" Infrastructure**: A single `terraform apply` provisions AWS VPC, EKS 1.36, ECR, Route 53, ACM SSL certificate, and deploys Metrics Server, AWS Load Balancer Controller, and ArgoCD automatically.

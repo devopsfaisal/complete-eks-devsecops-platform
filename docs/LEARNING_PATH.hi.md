@@ -177,3 +177,21 @@ kubectl run load-generator --rm -i --tty --image=busybox --restart=Never -- /bin
 
 3. **HPA ka mathematical formula kya hai?**
    $$\text{Desired Replicas} = \left\lceil \text{Current Replicas} \times \left( \frac{\text{Current Metric}}{\text{Target Metric}} \right) \right\rceil$$
+
+---
+
+## 11. Zero-Cost Clean Teardown: "One-Go Total Wipeout" Architecture
+
+Enterprise DevOps me infrastructure create karne jitna hi important use **cleanly teardown** karna hota hai taaki cloud me koi hidden cost ya orphan resources na bachein.
+
+### ❓ Teardown me common challenges kya aate hain?
+1. **Orphan ALBs & Subnet Dependency Violation**: Jab hum Ingress banate hain, toh AWS Load Balancer Controller AWS me ek Application Load Balancer aur ENIs create karta hai. Agar hum direct Terraform destroy chalayenge toh VPC delete nahi hogi (`DependencyViolation: Subnet has active interfaces`).
+2. **ECR Repository Non-Empty Error**: Agar ECR me images pushed hain toh AWS repo delete karne se mana kar deta hai (`RepositoryNotEmptyException`).
+3. **State Loss on Ephemeral Runners**: GitHub Actions ke ephemeral runners par agar state local ho toh runner khatam hone par state gayab ho jati hai.
+
+### 💡 Hamara Built-In Solution:
+- **Pre-Clean Step**: Teardown hone se pehle K8s Ingress ko delete karke AWS ALB ke deprovision hone ka 30s wait kiya jata hai.
+- **ECR `force_delete = true`**: Images ke bawajood repository safely delete hoti hai.
+- **Automated S3 & DynamoDB Wipeout**: Saare compute resources delete hone ke baad S3 backend bucket aur DynamoDB table ko bhi permanently wipe out kar diya jata hai taaki account 100% clean aur ₹0 billing par aa jaye!
+- **GitHub Actions One-Click**: Sirf `01: Terraform Infrastructure Pipeline` me `action: destroy` select karke run karna hota hai!
+
