@@ -1,0 +1,133 @@
+name: "02: Application DevSecOps & GitOps Pipeline"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "gitops/**"
+      - ".github/workflows/02-app-ci-cd.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  security-events: write
+
+env:
+  AWS_REGION: "ap-south-1"
+  ECR_REPOSITORY: "complete-eks-demo-app"
+
+jobs:
+  ci-test-and-scan:
+    name: "CI: Lint, Unit Test & Trivy Vulnerability Scan"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Test Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r app/requirements.txt -r app/requirements-dev.txt
+
+      - name: Lint Code (flake8)
+        run: |
+          flake8 app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 app/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+      - name: Run Unit Tests
+        run: |
+          python -m unittest discover -s app/tests -v
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Local Image for Security Scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          load: true
+          tags: ${{ env.ECR_REPOSITORY }}:scan-target
+
+      - name: Run Aqua Security Trivy Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REPOSITORY }}:scan-target
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  cd-ecr-and-gitops:
+    name: "CD: Push to ECR & Trigger ArgoCD GitOps Sync"
+    needs: ci-test-and-scan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository with Write Access
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Multi-Stage Image to ECR
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set Up Kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: "latest"
+
+      - name: Update GitOps Kustomize Image Tag
+        run: |
+          cd gitops/apps/portal
+          kustomize edit set image ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Commit & Push GitOps Image Manifests for ArgoCD
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add gitops/apps/portal/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No image change detected."
+          else
+            git commit -m "chore(gitops): update image tag to ${GITHUB_SHA::7} [skip ci]"
+            git push origin main
+          fi
