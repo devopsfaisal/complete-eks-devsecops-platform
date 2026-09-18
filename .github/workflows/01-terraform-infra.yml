@@ -35,7 +35,7 @@ env:
   TF_VERSION: "1.9.5"
   STATE_BUCKET: "complete-eks-devsecops-tfstate-461195385728"
   LOCK_TABLE: "complete-eks-devsecops-tflocks"
-  CLUSTER_NAME: "complete-eks-cluster"
+  CLUSTER_NAME: "complete-eks-platform"
 
 jobs:
   # ============================================================================

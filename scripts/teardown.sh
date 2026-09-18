@@ -2,7 +2,7 @@
 set -eo pipefail
 
 REGION="ap-south-1"
-CLUSTER_NAME="complete-eks-cluster"
+CLUSTER_NAME="complete-eks-platform"
 STATE_BUCKET="complete-eks-devsecops-tfstate-461195385728"
 LOCK_TABLE="complete-eks-devsecops-tflocks"
 
