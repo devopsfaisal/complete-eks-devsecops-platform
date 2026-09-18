@@ -2,13 +2,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - deployment.yaml
-  - service.yaml
-  - ingress.yaml
-  - hpa.yaml
-  - pdb.yaml
+- deployment.yaml
+- service.yaml
+- ingress.yaml
+- hpa.yaml
+- pdb.yaml
 
 images:
-  - name: 461195385728.dkr.ecr.ap-south-1.amazonaws.com/complete-eks-demo-app
-    newName: 461195385728.dkr.ecr.ap-south-1.amazonaws.com/complete-eks-demo-app
-    newTag: latest
+- name: 461195385728.dkr.ecr.ap-south-1.amazonaws.com/complete-eks-demo-app
+  newTag: 7dafdd130edae0299e3ff3731cb0697b1ff8a740
